@@ -40,7 +40,13 @@ var character = "yuji"
 var orientation = -1;
 
 function selectAgent(agent) {
-    window.location.href = "/?agent="+agent
+    let url = window.location.href;    
+    if (url.indexOf('?') > -1){
+        url += '&agent='+agent
+    } else {
+        url += '?agent='+agent
+    }
+    window.location.href = url;
 }
 
 function get(name){
