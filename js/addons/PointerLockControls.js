@@ -134,7 +134,7 @@ function onMouseMove( event ) {
 	const movementX = event.movementX || event.mozMovementX || event.webkitMovementX || 0;
 	const movementY = event.movementY || event.mozMovementY || event.webkitMovementY || 0;
 
-	if (!this.character.walking) {
+	if (!this.character.movementState != 0) {
 		const camera = this.head;
 		_euler.setFromQuaternion( camera.quaternion );
 

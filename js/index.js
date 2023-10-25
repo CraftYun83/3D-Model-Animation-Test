@@ -9,7 +9,7 @@ const fbxLoader = new FBXLoader();
 const textureLoader = new THREE.TextureLoader();
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize( window.innerWidth, window.innerHeight );
-var character, characterHead, controls, characterSpine;
+var character, controls;
 var gui;
 
 const light = new THREE.AmbientLight(0xffffff, 4)
@@ -18,7 +18,7 @@ scene.add( light );
 var mixer, activeAction, lastAction;
 var keyDown = {};
 var animationActions = []
-var jumpAnimation;
+var idleJumpAnimation, runningJumpAnimation;
 var jumping = false;
 var availableAgents = ["yuji", "gojo", "nobara", "megumi"]
 var agentOptionMapping = {
@@ -88,10 +88,8 @@ fbxLoader.load(
         var scale = 3/box.getSize( size ).y;
         model.scale.set(scale, scale, scale);
         character = model;
-        character.walking = false;
-        characterHead = model.getObjectByName("zeweier_Skin02_high_face001");
+        character.movementState = 0;
         scene.add(character)
-        characterSpine = model.getObjectByName("mixamorigSpine1")
         controls = new PointerLockControls( model.getObjectByName("mixamorigSpine1"), document.body, model.getObjectByName("mixamorigHips"), model.getObjectByName("mixamorigHead"), model, camera);
         controls.pointerSpeed = 0.5
         controls.maxPolarAngle = 3/4 * Math.PI
@@ -100,56 +98,49 @@ fbxLoader.load(
             controls.lock()
         })
 
-        mixer = new THREE.AnimationMixer(model)
-        var animationAction = mixer.clipAction(model.animations.find((clip) => clip.name.includes("Idle")))
-        animationActions.push(animationAction)
-        var animationAction = mixer.clipAction(model.animations.find((clip) => clip.name.includes("Walking")))
-        animationActions.push(animationAction)
-        jumpAnimation = mixer.clipAction(model.animations.find((clip) => clip.name.includes("Jumping")))
-        jumpAnimation.setLoop(THREE.LoopOnce);
-        jumpAnimation.timeScale = 1.25
+        document.body.innerHTML = ""
+        document.body.appendChild( renderer.domElement );
 
-        mixer.addEventListener("finished", (event) => {
-            if (event.action._clip.name.includes("Jumping")) {
-                jumpAnimation.fadeOut(0.5)
-                jumping = false;
-            }
-        })
+        mixer = new THREE.AnimationMixer(model)
+
+        var animationAction = mixer.clipAction(model.animations.find((clip) => clip.name === "Armature|Idle"))
+        animationActions.push(animationAction)
+        animationAction = mixer.clipAction(model.animations.find((clip) => clip.name === "Armature|Walking"))
+        animationActions.push(animationAction)
+        animationAction = mixer.clipAction(model.animations.find((clip) => clip.name === "Armature|Running"))
+        animationActions.push(animationAction)
+        animationAction = mixer.clipAction(model.animations.find((clip) => clip.name === "Armature|WalkingBackwards"))
+        animationActions.push(animationAction)
+
+        idleJumpAnimation = mixer.clipAction(model.animations.find((clip) => clip.name === "Armature|Jump"))
+        idleJumpAnimation.setLoop(THREE.LoopOnce);
+        idleJumpAnimation.timeScale = 1.1
+        runningJumpAnimation = mixer.clipAction(model.animations.find((clip) => clip.name === "Armature|JumpRunning"))
+        runningJumpAnimation.setLoop(THREE.LoopOnce);
 
         activeAction = animationActions[0]
         activeAction.play()
         activeAction.paused = true
         character.activeAction = activeAction
 
-        document.body.innerHTML = ""
-        document.body.appendChild( renderer.domElement );
-
         gui = new dat.GUI()
-        gui.add(agentOptionMapping, 'Megumi')
-        gui.add(agentOptionMapping, 'Gojo')
-        gui.add(agentOptionMapping, 'Nobara')
         gui.add(agentOptionMapping, 'Yuji')
+        gui.add(agentOptionMapping, 'Gojo')
+        gui.add(agentOptionMapping, 'Megumi')
+        gui.add(agentOptionMapping, 'Nobara')
         gui.add(agentOptionMapping, "Change Orientation")
 
     },
-    (xhr) => {},
-    (error) => {}
 )
 
-function toggle() {
+function action(index) {
     lastAction = activeAction;
-    if (animationActions.indexOf(lastAction) == 0) {
-        activeAction = animationActions[1]
-        lastAction.fadeOut(0.5)
-        activeAction.reset()
-        activeAction.fadeIn(0.5)
-        activeAction.play()
-    } else {
-        activeAction = animationActions[0]
-        lastAction.fadeOut(0.5)
-        activeAction.reset()
-        activeAction.fadeIn(0.5)
-        activeAction.play()
+    activeAction = animationActions[index]
+    lastAction.fadeOut(0.5)
+    activeAction.reset()
+    activeAction.fadeIn(0.5)
+    activeAction.play()
+    if (index == 0) {
         activeAction.paused = true
     }
     character.activeAction = activeAction
@@ -157,9 +148,33 @@ function toggle() {
 
 function jump() {
     jumping = true
-    jumpAnimation.reset()
-    jumpAnimation.fadeIn(0.5)
-    jumpAnimation.play()
+    activeAction.fadeOut(0.5)
+    if (character.movementState == 0) {
+        idleJumpAnimation.reset()
+        idleJumpAnimation.fadeIn(0.25)
+        idleJumpAnimation.play()
+        var time = idleJumpAnimation._clip.duration/1.1
+        setTimeout(() => {
+            idleJumpAnimation.fadeOut(0.25)
+            activeAction.reset()
+            activeAction.fadeIn(0.25)
+            activeAction.play()
+            activeAction.paused = true
+            setTimeout(() => {jumping = false;}, 250)
+        }, (time-0.25)*1000)
+    } else {
+        runningJumpAnimation.reset()
+        runningJumpAnimation.fadeIn(0.5)
+        runningJumpAnimation.play()
+        var time = runningJumpAnimation._clip.duration/1.2
+        setTimeout(() => {
+            runningJumpAnimation.fadeOut(0.25)
+            activeAction.reset()
+            activeAction.fadeIn(0.5)
+            activeAction.play()
+            setTimeout(() => {jumping = false;}, 250)
+        }, (time-0.25)*1000)
+    }
 }
 
 let sky, sun;
@@ -210,22 +225,44 @@ document.onkeyup = function(ev) {delete keyDown[ev.keyCode]}
 
 function evaluateMovement() {
     if (keyDown[87]) {
-        if (!character.walking) {
-            toggle()
-            character.walking = true;
+        var movementSpeed = 5
+        if (keyDown[17]) {
+            if (character.movementState != 2) {
+                character.movementState = 2
+                action(2)
+            }
+            controls.moveForward(-movementSpeed)
+        } else {
+            var movementSpeed = 3
+            if (character.movementState != 1) {
+                action(1)
+                character.movementState = 1;
+            }
+            controls.moveForward(-movementSpeed)
         }
-        controls.moveForward(-2)
     } else {
-        if (character.walking) {
-            toggle()
-            character.walking = false;
+        if (character.movementState != 0 && character.movementState != 3) {
+            action(0)
+            character.movementState = 0;
+        }
+        if (keyDown[83]) {
+            var movementSpeed = 2
+            if (character.movementState != 3) {
+                action(3)
+                character.movementState = 3;
+            }
+            controls.moveForward(movementSpeed)
+        } else {
+            if (character.movementState == 3) {
+                action(0)
+                character.movementState = 0;
+            }
         }
     }
 
     if (keyDown[32] && !jumping) {
-        console.log('yi6')
         jump()
-    }
+    } 
 }
 
 function animate() {
@@ -244,7 +281,7 @@ function animate() {
         controls.recalculateEuler1()
         var newpos = new THREE.Vector3(orientation * Math.sin(controls.calculateAngle())*4+character.position.x, 4, orientation*Math.cos(controls.calculateAngle())*4+character.position.z);
 
-        camera.position.lerp(newpos, 0.4)
+        camera.position.lerp(newpos, 0.2)
     }
 
 	renderer.render( scene, camera );
