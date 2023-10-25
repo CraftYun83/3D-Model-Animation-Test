@@ -36,10 +36,21 @@ var agentOptionMapping = {
     },
     "Change Orientation": () => {orientation *= -1}
 }
-var character = "yuji"
+var characterType = "dynamic"
+var character = "character"
+var skin = "cyborg"
+var isDynamic = 2;
 var orientation = -1;
+var skins = ["criminal", "cyborg", "skater1", "skater2", "human1", "human2", "zombie1", "zombie2"]
+var dynamicOptions
+var newDynamicOptions = function() {
+    this.Skin = skin
+}
 
 function selectAgent(agent) {
+    if (agent == undefined) {
+        agent = dynamicOptions.Skin
+    }
     var onlyUrl = window.location.href.replace(window.location.search,'');    
     if (onlyUrl.indexOf('?') > -1){
         onlyUrl += '&agent='+agent
@@ -55,7 +66,13 @@ function get(name){
  }
 
 if (availableAgents.includes(get("agent"))) {
+    characterType = "jjk"
     character = get("agent")
+    isDynamic = 1
+} if (skins.includes(get("agent"))) {
+    characterType = "dynamic"
+    skin = get("agent")
+    isDynamic = 2
 }
 
 textureLoader.load('textures/ground.jpg', function ( texture ) {
@@ -71,18 +88,31 @@ textureLoader.load('textures/ground.jpg', function ( texture ) {
 });
 
 fbxLoader.load(
-    "model/"+character+"/"+character+".fbx",
+    "model/"+characterType+"/"+character+"/"+character+".fbx",
     (model) => {
-        model.traverse(child => {
-            if (child.isMesh) {
-                if (Array.isArray(child.material)) {
-                    child.material.forEach((mat) => {mat.transparent = false; mat.vertexColors = false})
-                } else {
-                    child.material.transparent = false
-                    child.material.vertexColors = false
+        var modelMaterial;
+        if (isDynamic == 2) {
+            textureLoader.load('model/dynamic/textures/'+skin+'.png', function ( texture ) {
+                modelMaterial = new THREE.MeshBasicMaterial( {map: texture});
+                model.children[1].material = modelMaterial
+            })
+        }
+        if (isDynamic == 1) {
+            model.traverse(child => {
+                if (child.isMesh) {
+                    if (Array.isArray(child.material)) {
+                        child.material.forEach((mat) => {
+                            mat.transparent = false; 
+                            mat.vertexColors = false;
+                        })
+                    } else {
+                        child.material.transparent = false
+                        child.material.vertexColors = false
+                    }
+                    
                 }
-            }
-          })
+            })
+        }
         var box = new THREE.Box3().setFromObject( model )
         var size = new THREE.Vector3();
         var scale = 3/box.getSize( size ).y;
@@ -124,10 +154,16 @@ fbxLoader.load(
         character.activeAction = activeAction
 
         gui = new dat.GUI()
-        gui.add(agentOptionMapping, 'Yuji')
-        gui.add(agentOptionMapping, 'Gojo')
-        gui.add(agentOptionMapping, 'Megumi')
-        gui.add(agentOptionMapping, 'Nobara')
+        var jjkFolder = gui.addFolder("Jujutsu Kaisen")
+        jjkFolder.add(agentOptionMapping, 'Yuji')
+        jjkFolder.add(agentOptionMapping, 'Gojo')
+        jjkFolder.add(agentOptionMapping, 'Megumi')
+        jjkFolder.add(agentOptionMapping, 'Nobara')
+        var dynamicFolder = gui.addFolder("Dynamic Characters")
+        dynamicOptions = new newDynamicOptions()
+        var dropdown = dynamicFolder.add(dynamicOptions, 'Skin',skins);
+        dropdown.setValue(dynamicOptions.Skin)
+        dropdown.onChange(selectAgent)
         gui.add(agentOptionMapping, "Change Orientation")
 
     },
@@ -225,7 +261,7 @@ document.onkeyup = function(ev) {delete keyDown[ev.keyCode]}
 
 function evaluateMovement() {
     if (keyDown[87]) {
-        var movementSpeed = 5
+        var movementSpeed = 5 * isDynamic
         if (keyDown[17]) {
             if (character.movementState != 2) {
                 character.movementState = 2
@@ -233,7 +269,7 @@ function evaluateMovement() {
             }
             controls.moveForward(-movementSpeed)
         } else {
-            var movementSpeed = 3
+            var movementSpeed = 3 * isDynamic
             if (character.movementState != 1) {
                 action(1)
                 character.movementState = 1;
@@ -246,7 +282,7 @@ function evaluateMovement() {
             character.movementState = 0;
         }
         if (keyDown[83]) {
-            var movementSpeed = 2
+            var movementSpeed = 2 * isDynamic
             if (character.movementState != 3) {
                 action(3)
                 character.movementState = 3;
