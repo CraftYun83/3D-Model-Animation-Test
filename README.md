@@ -1,4 +1,4 @@
-# Jujutsu-Kaisen-Model-Test
+# 3D-Model-Animation-Test
 Movement and animation using Jujutsu Kaisen characters in a small sandbox. (now supports other characters that aren't jujutsu kaisen related)
 
 Built using THREE.js
